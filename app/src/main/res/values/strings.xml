@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="action_clear">Clear</string>
+    <string name="app_name">MinimalExample</string>
+    <string name="title_activity_example">ExampleActivity</string>
+    <string name="destination_label">Destination</string>
+    <string name="destination_value">dtn://host.dtn/minimal-example</string>
+    <string name="message_label">Message</string>
+    <string name="message_value">http://www.cs.loyola.edu/~isaacman/</string>
+    <string name="send_label">Send</string>
+
+    <string name="hello_world">Hello world!</string>
+
+</resources>
