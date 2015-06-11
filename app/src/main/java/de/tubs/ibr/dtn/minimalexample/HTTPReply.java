@@ -1,6 +1,7 @@
 package de.tubs.ibr.dtn.minimalexample;
 
 import android.content.Context;
+import android.util.Log;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -12,18 +13,21 @@ import java.io.InputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
  * Created by Sibren on 6/10/2015.
  */
 public class HTTPReply {
-    private String mURL;
-    private String mResponse;
+    private String mURL="";
+    private String mResponse="";
     private byte[] mData;
-    private Map<String, String> mHeaders;
+    private HashMap<String, String> mHeaders=new HashMap<>();
     private boolean exists=false;
     private Context mContext;
+
+    private static final String TAG="HTTPReply";
 
     private void createReplyFromInputStream(InputStream input){
         int curr,prev;
@@ -37,6 +41,8 @@ public class HTTPReply {
                 }
                 prev = curr;
             }
+
+
             prev = input.read();
             String header = "" ;
             String value = "" ;
@@ -59,6 +65,9 @@ public class HTTPReply {
                     } else {
                         inValue = false;
                         mHeaders.put(header, value);
+                        header="";
+                        value="";
+                        curr = input.read();
                     }
                 }
                 prev = curr;
@@ -95,8 +104,11 @@ public class HTTPReply {
 
     public HTTPReply(Context context, byte[] replyWithURL){
         mContext=context;
-        setURLfromInputStream(new ByteArrayInputStream(replyWithURL));
-        createReplyFromInputStream(new ByteArrayInputStream(replyWithURL));
+
+        ByteArrayInputStream byteInput = new ByteArrayInputStream(replyWithURL);
+
+        setURLfromInputStream(byteInput);
+        createReplyFromInputStream(byteInput);
     }
 
     public HTTPReply(Context context, String url, byte[] fullReply){
@@ -105,19 +117,12 @@ public class HTTPReply {
         mContext=context;
     }
 
-    public HTTPReply(Context context, String filename){
-        int curr;
-        int prev;
-        mURL="";
-        mResponse="";
+    public HTTPReply(Context context, String url) throws FileNotFoundException{
         mContext=context;
-        try {
-            BufferedInputStream input = new BufferedInputStream(context.openFileInput(filename));
-            setURLfromInputStream(input);
-            createReplyFromInputStream(input);
-        } catch (FileNotFoundException fnfe){
+        BufferedInputStream input = new BufferedInputStream(context.openFileInput(computeMD5Hash(url)));
+        setURLfromInputStream(input);
+        createReplyFromInputStream(input);
 
-        }
     }
 
     public void saveToFile(){
@@ -135,26 +140,50 @@ public class HTTPReply {
             }
             output.write("\r\n".getBytes());
             output.write(mData);
+
+            String byteArray="";
+            for(int i=0; i < mData.length; i++){
+                byteArray+= " " + (int)mData[i];
+            }
+
             output.close();
+
+            Log.d(TAG, "Creating " + filename);
+            Log.d(TAG,"data: " + byteArray);
+            Log.d(TAG, "Length: " + mData.length);
+
         } catch (Exception e){
 
         }
     }
 
+    public int responseCode(){
+        String codeAndWords=mResponse.substring(mResponse.indexOf(" ")+1);
+        return Integer.parseInt(codeAndWords.substring(0,codeAndWords.indexOf(" ")));
+    }
+
+    public String reasonPhrase(){
+        String codeAndWords=mResponse.substring(mResponse.indexOf(" ")+1);
+        return codeAndWords.substring(codeAndWords.indexOf(" "));
+    }
 
     public byte[] getData() {
         return mData;
     }
 
     public String getMimeType(){
-        return mHeaders.get("MIME-type")
+        String type= mHeaders.get("Content-Type");
+        if(type==null){
+            type="text/html";
+        }
+        return type;
     }
 
     public String getURL(){
         return mURL;
     }
 
-    public Map<String,String> getHeaders(){
+    public HashMap<String,String> getHeaders(){
         return mHeaders;
     }
 
@@ -162,13 +191,13 @@ public class HTTPReply {
         return new File(mContext.getFilesDir(),computeMD5Hash(mURL)).getAbsolutePath();
     }
 
-    public static String computeMD5Hash(String password)
+    public static String computeMD5Hash(String stringToHash)
     {
 
         try {
             // Create MD5 Hash
             MessageDigest digest = java.security.MessageDigest.getInstance("MD5");
-            digest.update(password.getBytes());
+            digest.update(stringToHash.getBytes());
             byte messageDigest[] = digest.digest();
 
             StringBuffer MD5Hash = new StringBuffer();

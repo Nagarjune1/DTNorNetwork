@@ -67,10 +67,11 @@ public class MyDtnIntentService extends DTNIntentService {
                 Log.d(TAG,"Sending message to: "+intent.getStringExtra(EXTRA_DESTINATION));
                 SingletonEndpoint destination = new SingletonEndpoint(intent.getStringExtra(EXTRA_DESTINATION));
                 BundleID thisbundle = mSession.send(destination, 3600, intent.getByteArrayExtra(EXTRA_PAYLOAD));
-
+/*
                 Log.d(TAG, "Sending " + new String(intent.getByteArrayExtra(EXTRA_PAYLOAD)) +
                         " to " + intent.getStringExtra(EXTRA_DESTINATION) + " in bundle " +
                         thisbundle.toString());
+*/
             } catch (SessionDestroyedException e) {
                 Log.e(TAG, "session destroyed", e);
             }
@@ -156,7 +157,7 @@ public class MyDtnIntentService extends DTNIntentService {
         @Override
         public void payload(byte[] data) {
             // payload is received here
-//            Log.d(TAG, "payload received: " + new String(data));
+            Log.d(TAG, "payload received: " );
 
             // forward message to an activity
             Intent mi = new Intent(ACTION_RECV_MESSAGE);

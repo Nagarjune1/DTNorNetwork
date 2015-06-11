@@ -25,19 +25,27 @@ import android.webkit.WebViewClient;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.apache.http.protocol.HTTP;
+
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 
 public class ExampleActivity extends Activity {
 
     public static final char REQUEST_FLAG='Q';
     public static final char REPLY_FLAG='A';
+    public static final char SUBS_FLAG='S';
+    public static final char BACK_FLAG='B';
+
     TextView mDestination = null;
     TextView mMessage = null;
    // private TextView mResult;
@@ -65,15 +73,53 @@ public class ExampleActivity extends Activity {
 
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                Log.d(TAG, "should intercept: " + request.getUrl());
-                return null;
+
+                ConnectivityManager cm = (ConnectivityManager)
+                        getSystemService(Context.CONNECTIVITY_SERVICE);
+                NetworkInfo activeNetwork = cm.getActiveNetworkInfo();
+                if (activeNetwork.getType() == ConnectivityManager.TYPE_MOBILE)
+                    return null;
+
+                try {
+                    HTTPReply reply = new HTTPReply(getApplicationContext(), request.getUrl().toString());
+                    WebResourceResponse response = new WebResourceResponse(reply.getMimeType(),
+                            "utf-8",
+                            reply.responseCode(),
+                            reply.reasonPhrase(),
+                            reply.getHeaders(),
+                            new ByteArrayInputStream(reply.getData()));
+                    Log.d(TAG, "attempting to load " + request.getUrl().toString() + " type " + reply.getMimeType());
+                    InputStream test = response.getData();
+                    String allBytes="";
+                    int read;
+                    int count=0;
+                    try {
+                        while ((read = test.read()) != -1) {
+                            allBytes += " " + read;
+                            count++;
+                        }
+                        Log.d(TAG, "data: " + allBytes);
+                        Log.d(TAG,"count: " + count);
+                    } catch (IOException e) {}
+                    return response;
+
+                } catch (FileNotFoundException fnfe) {
+                    Intent intent = new Intent(ExampleActivity.this, MyDtnIntentService.class);
+                    intent.setAction(MyDtnIntentService.ACTION_SEND_MESSAGE);
+                    intent.putExtra(MyDtnIntentService.EXTRA_DESTINATION, mDestination.getText().toString());
+                    intent.putExtra(MyDtnIntentService.EXTRA_PAYLOAD,
+                            (SUBS_FLAG + request.getUrl().toString()).getBytes());
+                    startService(intent);
+                    Log.d(TAG, "sending intercept for DTN " + request.getUrl());
+                    return null;
+
+                }
+
+
+
             }
 
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                Log.d(TAG, "should override: " + url);
-                return false;
-            }
+
         });
         Log.d(TAG,"Download Listener set");
 
@@ -113,10 +159,10 @@ public class ExampleActivity extends Activity {
                             BufferedInputStream input;
                             try {
 
-                                String filename=computeMD5Hash(mMessage.getText().toString());
+                                //String filename=computeMD5Hash(mMessage.getText().toString());
 
                                 String urlname = mMessage.getText().toString();
-
+/*
                                 input = new BufferedInputStream(openFileInput(filename));
                                 int read;
                                 String buffer="";
@@ -130,13 +176,17 @@ public class ExampleActivity extends Activity {
                                 //mResult.setText(Html.fromHtml(buffer));
                                 //mWebView.loadUrl("file:///"+temp.getAbsolutePath());
                                 mWebView.loadDataWithBaseURL(urlname.substring(0,urlname.lastIndexOf('/')+1),buffer,"text/html","utf-8",null);
+                                */
+
+                                HTTPReply page = new HTTPReply(getApplicationContext(),urlname);
+                                mWebView.loadDataWithBaseURL(page.getURL(),new String(page.getData()),page.getMimeType(),"utf-8",null);
 
                                 Toast.makeText(ExampleActivity.this,
                                         "Loaded from file",
                                         Toast.LENGTH_LONG).show();
 
                             } catch(Exception e) {
-Log.d(TAG,"Excpetion in file open: " + e);
+                                Log.d(TAG,"Exception in file open: " + e);
                                 Toast.makeText(ExampleActivity.this,
                                         REQUEST_FLAG + mMessage.getText().toString(),
                                         Toast.LENGTH_LONG).show();
@@ -155,7 +205,7 @@ Log.d(TAG,"Excpetion in file open: " + e);
                             case (TelephonyManager.NETWORK_TYPE_HSPAP):
                             case (TelephonyManager.NETWORK_TYPE_EDGE):
                             case (TelephonyManager.NETWORK_TYPE_GPRS):
-                                mService.getPage(mMessage.getText().toString(), mWebView, MyNetworkGETService.NO_DESTINATION);
+                                mService.getPage(mMessage.getText().toString(), mWebView, MyNetworkGETService.NO_DESTINATION, '\0');
                                 break;
                             default:
                                 break;
@@ -254,16 +304,28 @@ Log.d(TAG,"Excpetion in file open: " + e);
 
                 byte[] payload = intent.getByteArrayExtra(MyDtnIntentService.EXTRA_PAYLOAD);
                 //Log.d(TAG, "Received: " + new String(payload));
-                if((char)payload[0]==REQUEST_FLAG){
+                if((char)payload[0]==REQUEST_FLAG || (char)payload[0]==SUBS_FLAG){
                     Log.d(TAG, "Got a request");
+
+                    char type;
+                    if((char)payload[0]==REQUEST_FLAG){
+                        type=REPLY_FLAG;
+                    } else {
+                        type=BACK_FLAG;
+                    }
+
                     mService.getPage(new String(payload, 1, payload.length - 1), null,
-                            intent.getStringExtra(MyDtnIntentService.EXTRA_SOURCE));
-                } else if((char)payload[0]==REPLY_FLAG){
-                    Log.d(TAG, "Sending a reply");
-                    HTTPReply reply = new HTTPReply(getApplicationContext(),payload);
+                            intent.getStringExtra(MyDtnIntentService.EXTRA_SOURCE), type);
+                } else if((char)payload[0]==REPLY_FLAG || (char)payload[0]==BACK_FLAG){
+
+                    HTTPReply reply = new HTTPReply(getApplicationContext(), Arrays.copyOfRange(payload, 1, payload.length));
                     reply.saveToFile();
 
-                    mWebView.loadDataWithBaseURL(reply.getURL(),new String(reply.getData()),"text/html","utf-8",null);
+                    Log.d(TAG, "Saving " + reply.getURL());
+                    if((char)payload[0]==REPLY_FLAG) {
+                        Log.d(TAG, "Displaying " + reply.getURL());
+                        mWebView.loadDataWithBaseURL(reply.getURL(), new String(reply.getData()), reply.getMimeType(), "utf-8", null);
+                    }
                 }
             }
         }
