@@ -12,7 +12,7 @@ import android.net.NetworkInfo;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.telephony.TelephonyManager;
-import android.text.Html;
+import android.util.Base64;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -25,18 +25,10 @@ import android.webkit.WebViewClient;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import org.apache.http.protocol.HTTP;
 
 import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
 import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStream;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 
 public class ExampleActivity extends Activity {
@@ -80,27 +72,32 @@ public class ExampleActivity extends Activity {
                 if (activeNetwork.getType() == ConnectivityManager.TYPE_MOBILE)
                     return null;
 
+                if(!request.getUrl().getScheme().equals("http")){
+                    Log.d(TAG, "not http");
+                    return null;
+                }
+
                 try {
                     HTTPReply reply = new HTTPReply(getApplicationContext(), request.getUrl().toString());
-                    WebResourceResponse response = new WebResourceResponse(reply.getMimeType(),
-                            "utf-8",
-                            reply.responseCode(),
-                            reply.reasonPhrase(),
-                            reply.getHeaders(),
-                            new ByteArrayInputStream(reply.getData()));
-                    Log.d(TAG, "attempting to load " + request.getUrl().toString() + " type " + reply.getMimeType());
-                    InputStream test = response.getData();
-                    String allBytes="";
-                    int read;
-                    int count=0;
-                    try {
-                        while ((read = test.read()) != -1) {
-                            allBytes += " " + read;
-                            count++;
-                        }
-                        Log.d(TAG, "data: " + allBytes);
-                        Log.d(TAG,"count: " + count);
-                    } catch (IOException e) {}
+                    WebResourceResponse response;
+                    if(reply.getMimeType().startsWith("image")){
+
+
+                        response = new WebResourceResponse("image/*", "base64",reply.responseCode(),
+                                reply.reasonPhrase(),
+                                reply.getHeaders(), new ByteArrayInputStream(reply.getData()));
+
+                    } else {
+                        response = new WebResourceResponse(reply.getMimeType(),
+                                "utf-8",
+                                reply.responseCode(),
+                                reply.reasonPhrase(),
+                                reply.getHeaders(),
+                                new ByteArrayInputStream(reply.getData()));
+                    }
+                    Log.d(TAG, "attempting to load " + request.getUrl().toString() + " type " + response.getMimeType() + " encoding " + response.getEncoding());
+                    Log.d(TAG, "Headers: " + response.getResponseHeaders());
+
                     return response;
 
                 } catch (FileNotFoundException fnfe) {
@@ -179,8 +176,15 @@ public class ExampleActivity extends Activity {
                                 */
 
                                 HTTPReply page = new HTTPReply(getApplicationContext(),urlname);
-                                mWebView.loadDataWithBaseURL(page.getURL(),new String(page.getData()),page.getMimeType(),"utf-8",null);
+                                if(page.getMimeType().startsWith("image")){
 
+                                    String base64String = Base64.encodeToString(page.getData(),Base64.DEFAULT);
+
+                                    mWebView.loadData(base64String,page.getMimeType(),"base64");
+
+                                } else {
+                                    mWebView.loadDataWithBaseURL(page.getURL(), new String(page.getData()), page.getMimeType(), "utf-8", null);
+                                }
                                 Toast.makeText(ExampleActivity.this,
                                         "Loaded from file",
                                         Toast.LENGTH_LONG).show();
@@ -324,7 +328,15 @@ public class ExampleActivity extends Activity {
                     Log.d(TAG, "Saving " + reply.getURL());
                     if((char)payload[0]==REPLY_FLAG) {
                         Log.d(TAG, "Displaying " + reply.getURL());
-                        mWebView.loadDataWithBaseURL(reply.getURL(), new String(reply.getData()), reply.getMimeType(), "utf-8", null);
+                        if(reply.getMimeType().startsWith("image")){
+
+                            String base64String = Base64.encodeToString(reply.getData(),Base64.DEFAULT);
+
+                            mWebView.loadData(base64String,reply.getMimeType(),"base64");
+
+                        } else {
+                            mWebView.loadDataWithBaseURL(reply.getURL(), new String(reply.getData()), reply.getMimeType(), "utf-8", null);
+                        }
                     }
                 }
             }

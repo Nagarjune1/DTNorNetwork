@@ -12,7 +12,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -141,16 +140,10 @@ public class HTTPReply {
             output.write("\r\n".getBytes());
             output.write(mData);
 
-            String byteArray="";
-            for(int i=0; i < mData.length; i++){
-                byteArray+= " " + (int)mData[i];
-            }
-
             output.close();
 
             Log.d(TAG, "Creating " + filename);
-            Log.d(TAG,"data: " + byteArray);
-            Log.d(TAG, "Length: " + mData.length);
+             Log.d(TAG, "Length: " + mData.length);
 
         } catch (Exception e){
 

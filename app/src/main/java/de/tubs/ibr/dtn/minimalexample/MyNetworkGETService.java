@@ -1,7 +1,6 @@
 package de.tubs.ibr.dtn.minimalexample;
 
 import android.app.Service;
-import android.content.Context;
 import android.content.Intent;
 import android.os.Binder;
 import android.os.IBinder;
@@ -10,7 +9,6 @@ import android.util.Log;
 import android.webkit.WebView;
 import android.widget.TextView;
 
-import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -18,7 +16,6 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.net.Socket;
 import java.net.UnknownHostException;
-import java.util.ArrayList;
 
 
 public class MyNetworkGETService extends Service {

@@ -4,6 +4,9 @@ import android.content.Intent;
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+
 import de.tubs.ibr.dtn.api.Block;
 import de.tubs.ibr.dtn.api.Bundle;
 import de.tubs.ibr.dtn.api.BundleID;
@@ -14,7 +17,6 @@ import de.tubs.ibr.dtn.api.DataHandler;
 import de.tubs.ibr.dtn.api.Registration;
 import de.tubs.ibr.dtn.api.ServiceNotAvailableException;
 import de.tubs.ibr.dtn.api.SessionDestroyedException;
-import de.tubs.ibr.dtn.api.SimpleDataHandler;
 import de.tubs.ibr.dtn.api.SingletonEndpoint;
 import de.tubs.ibr.dtn.api.TransferMode;
 
@@ -104,6 +106,8 @@ public class MyDtnIntentService extends DTNIntentService {
     private DataHandler mDataHandler = new DataHandler() {
 
         private Bundle mBundle = null;
+        private ParcelFileDescriptor fD=null;
+        private ByteArrayOutputStream baos;
 
         @Override
         public void startBundle(Bundle bundle) {
@@ -123,7 +127,12 @@ public class MyDtnIntentService extends DTNIntentService {
             i.setAction(ACTION_MARK_DELIVERED);
             i.putExtra(EXTRA_BUNDLEID, received);
             startService(i);
-
+/*
+            Intent mi = new Intent(ACTION_RECV_MESSAGE);
+            mi.putExtra(EXTRA_SOURCE, mBundle.getSource().toString());
+            mi.putExtra(EXTRA_PAYLOAD, data);
+            sendBroadcast(mi);
+*/
             // free the bundle header
             mBundle = null;
 
@@ -131,10 +140,23 @@ public class MyDtnIntentService extends DTNIntentService {
 
         @Override
         public TransferMode startBlock(Block block) {
+
             // we are only interested in payload blocks (type = 1)
             if (block.type == 1) {
+                Log.d(TAG, "Block started");
+
+                baos=new ByteArrayOutputStream();
+
                 // return SIMPLE mode to received the payload as "payload()" calls
                 return TransferMode.SIMPLE;
+/*                try {
+                    ParcelFileDescriptor[] p = ParcelFileDescriptor.createPipe();
+                    fD = p[1];
+                    return TransferMode.FILEDESCRIPTOR;
+                } catch (IOException ioe){
+                    Log.e(TAG, "Cannot create file: " + ioe);
+                    return TransferMode.NULL;
+                }*/
             } else {
                 // return NULL to discard the payload of this block
                 return TransferMode.NULL;
@@ -144,6 +166,21 @@ public class MyDtnIntentService extends DTNIntentService {
         @Override
         public void endBlock() {
             // nothing to do here.
+Log.d(TAG,"Block ended");
+/*            if(fD!=null){
+                try {
+                    fD.close();
+                    fD = null;
+                } catch (IOException e){
+                    Log.e(TAG, "Canot close file: " + e);
+                }
+            }
+            */
+            Intent mi = new Intent(ACTION_RECV_MESSAGE);
+            mi.putExtra(EXTRA_SOURCE, mBundle.getSource().toString());
+            mi.putExtra(EXTRA_PAYLOAD, baos.toByteArray());
+            sendBroadcast(mi);
+            baos=null;
         }
 
         @Override
@@ -151,21 +188,25 @@ public class MyDtnIntentService extends DTNIntentService {
             // This method is used to hand-over a file descriptor to the
             // DTN service. We do not need the method here and always return
             // null.
-            return null;
+            //return null;
+            return fD;
         }
 
         @Override
         public void payload(byte[] data) {
             // payload is received here
             Log.d(TAG, "payload received: " );
-
-            // forward message to an activity
+            try {
+                baos.write(data);
+            } catch (IOException e){
+                Log.e(TAG,"Error writing data: " + e);
+            }
+        /*    // forward message to an activity
             Intent mi = new Intent(ACTION_RECV_MESSAGE);
             mi.putExtra(EXTRA_SOURCE, mBundle.getSource().toString());
             mi.putExtra(EXTRA_PAYLOAD, data);
             sendBroadcast(mi);
-
-
+*/
         }
 
         @Override
