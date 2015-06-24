@@ -113,6 +113,24 @@ public class MyNetworkGETService extends Service {
                 intent.putExtra(MyDtnIntentService.EXTRA_PAYLOAD, returnArray);
                 startService(intent);
 
+                String replycode = returnArrayStream.toString().substring(returnArrayStream.toString().indexOf("\r\n")+2);
+                if (replycode.startsWith("HTTP/1.1 3")){
+                    HTTPReply nextRequest=new HTTPReply(getApplicationContext(),returnArray);
+                    if(nextRequest.getHeaders().get("Location")!=null){
+                        try {
+                            new DataThread((new Parser("GET " + nextRequest.getHeaders().get("Location") + " HTTP/1.0")), myView, mDest, mType).start();
+                        } catch (Parser.BadRequestException bre){
+                            Intent nextintent=new Intent(MyNetworkGETService.this,MyDtnIntentService.class);
+                            nextintent.setAction(MyDtnIntentService.ACTION_REPLY_MESSAGE);
+                            nextintent.putExtra(MyDtnIntentService.EXTRA_DESTINATION, mDest);
+                            nextintent.putExtra(MyDtnIntentService.EXTRA_PAYLOAD, (mType +
+                                    nextRequest.getHeaders().get("Location")+
+                                    "\r\nHTTP 500 Bad request\r\n\r\nBad Request: "+bre).getBytes());
+                            startService(nextintent);
+                        }
+                    }
+                }
+
             }
         }
     }
