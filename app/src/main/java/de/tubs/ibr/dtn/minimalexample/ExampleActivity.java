@@ -9,8 +9,13 @@ import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.net.Uri;
+import android.net.wifi.p2p.WifiP2pConfig;
+import android.net.wifi.p2p.WifiP2pManager;
+import android.net.wifi.p2p.nsd.WifiP2pServiceInfo;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.os.Parcel;
 import android.telephony.TelephonyManager;
 import android.util.Base64;
 import android.util.Log;
@@ -29,7 +34,10 @@ import android.widget.Toast;
 import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
 import java.io.FileNotFoundException;
+import java.net.URL;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 
 public class ExampleActivity extends Activity {
 
@@ -38,7 +46,7 @@ public class ExampleActivity extends Activity {
     public static final char SUBS_FLAG='S';
     public static final char BACK_FLAG='B';
 
-    TextView mDestination = null;
+//    TextView mDestination = null;
     TextView mMessage = null;
    // private TextView mResult;
     private MyNetworkGETService mService;
@@ -47,12 +55,62 @@ public class ExampleActivity extends Activity {
 
     private final static String TAG="ExampleActivity";
 
+    private void loadViaDTN(){
+
+        try {
+
+            String urlname = mMessage.getText().toString();
+
+            HTTPReply page = new HTTPReply(getApplicationContext(),urlname);
+            if(page.getMimeType().startsWith("image")){
+
+                String base64String = Base64.encodeToString(page.getData(),Base64.DEFAULT);
+
+                mWebView.loadData(base64String,page.getMimeType(),"base64");
+
+            } else {
+                mWebView.loadDataWithBaseURL(page.getURL(), new String(page.getData()), page.getMimeType(), "utf-8", null);
+            }
+            Toast.makeText(ExampleActivity.this,
+                    "Loaded from file",
+                    Toast.LENGTH_LONG).show();
+
+        } catch(Exception e) {
+            Log.d(TAG,"Exception in file open: " + e);
+            Toast.makeText(ExampleActivity.this,
+                    REQUEST_FLAG + mMessage.getText().toString(),
+                    Toast.LENGTH_LONG).show();
+
+            Intent intent = new Intent(ExampleActivity.this, MyDtnIntentService.class);
+            intent.setAction(MyDtnIntentService.ACTION_SEND_MESSAGE);
+            intent.putExtra(MyDtnIntentService.EXTRA_PAYLOAD,
+                    (REQUEST_FLAG + mMessage.getText().toString()).getBytes());
+            startService(intent);
+        }
+    }
+
+    public WebResourceResponse handleRedirect(HTTPReply request){
+
+        WebResourceResponse newPage;
+        Log.d(TAG, "Headers in redirect: " +request.getHeaders());
+
+        String nextPage=request.getHeaders().get("Location");
+        if(nextPage==null){
+            return null;
+        } else {
+
+        }
+
+        HTTPReply newResponse;
+        return null;
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_example);
 
-        mDestination = (TextView)findViewById(R.id.textDestination);
+//        mDestination = (TextView)findViewById(R.id.textDestination);
         mMessage = (TextView)findViewById(R.id.textMessage);
        // mResult=(TextView) findViewById(R.id.resultText);
         mWebView=(WebView) findViewById(R.id.resultWeb);
@@ -64,13 +122,18 @@ public class ExampleActivity extends Activity {
             }
 
             @Override
-            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+            public WebResourceResponse shouldInterceptRequest(WebView view, final WebResourceRequest request) {
+
+                Log.d(TAG, "Intercept request for: " + request.getUrl().toString() + " " + request.isForMainFrame());
 
                 ConnectivityManager cm = (ConnectivityManager)
                         getSystemService(Context.CONNECTIVITY_SERVICE);
                 NetworkInfo activeNetwork = cm.getActiveNetworkInfo();
-                if (activeNetwork.getType() == ConnectivityManager.TYPE_MOBILE)
+
+                if (activeNetwork!=null && activeNetwork.getType() == ConnectivityManager.TYPE_MOBILE) {
+                    Log.d(TAG,"No network at all");
                     return null;
+                }
 
                 if(!request.getUrl().getScheme().equals("http")){
                     Log.d(TAG, "not http");
@@ -78,8 +141,53 @@ public class ExampleActivity extends Activity {
                 }
 
                 try {
-                    HTTPReply reply = new HTTPReply(getApplicationContext(), request.getUrl().toString());
+                    final HTTPReply reply = new HTTPReply(getApplicationContext(), request.getUrl().toString());
                     WebResourceResponse response;
+                    if(reply.responseCode()<400 && reply.responseCode()>=300) {
+                        Log.d(TAG,"Redirect");
+                        //response = handleRedirect(reply);
+
+                        final WebResourceRequest trickle=new WebResourceRequest() {
+                            @Override
+                            public Uri getUrl() {
+                                try {
+                                    return Uri.parse(reply.getHeaders().get("Location"));
+
+                                } catch (Exception e){
+                                    Log.d(TAG, "Error creating new WebResourceRequest: " + e);
+                                    return null;
+                                }
+
+                            }
+
+                            @Override
+                            public boolean isForMainFrame() {
+                                return request.isForMainFrame();
+                            }
+
+                            @Override
+                            public boolean hasGesture() {
+                                return false;
+                            }
+
+                            @Override
+                            public String getMethod() {
+                                return null;
+                            }
+
+                            @Override
+                            public Map<String, String> getRequestHeaders() {
+                                return null;
+                            }
+                        };
+                        return shouldInterceptRequest(view, trickle);
+                    }
+
+                    if(request.isForMainFrame()){
+                        fillMainWindow(reply);
+                        return null;
+                    }
+
                     if(reply.getMimeType().startsWith("image")){
 
 
@@ -89,21 +197,27 @@ public class ExampleActivity extends Activity {
 
                     } else {
                         response = new WebResourceResponse(reply.getMimeType(),
-                                "utf-8",
+                                reply.getEncoding(),
                                 reply.responseCode(),
                                 reply.reasonPhrase(),
                                 reply.getHeaders(),
                                 new ByteArrayInputStream(reply.getData()));
+
+
+/*                        response = new WebResourceResponse("text/html",
+                                "utf-8", new ByteArrayInputStream(reply.getData()));
+*/
                     }
                     Log.d(TAG, "attempting to load " + request.getUrl().toString() + " type " + response.getMimeType() + " encoding " + response.getEncoding());
                     Log.d(TAG, "Headers: " + response.getResponseHeaders());
+
+
 
                     return response;
 
                 } catch (FileNotFoundException fnfe) {
                     Intent intent = new Intent(ExampleActivity.this, MyDtnIntentService.class);
                     intent.setAction(MyDtnIntentService.ACTION_SEND_MESSAGE);
-                    intent.putExtra(MyDtnIntentService.EXTRA_DESTINATION, mDestination.getText().toString());
                     intent.putExtra(MyDtnIntentService.EXTRA_PAYLOAD,
                             (SUBS_FLAG + request.getUrl().toString()).getBytes());
                     startService(intent);
@@ -127,7 +241,8 @@ public class ExampleActivity extends Activity {
                 String endpoint = getIntent().getExtras().getString(de.tubs.ibr.dtn.Intent.EXTRA_ENDPOINT);
 
                  if (endpoint.startsWith("dtn:")) {
-                    mDestination.setText(endpoint + "/minimal-example");
+//                    mDestination.setText(endpoint + "/minimal-example");
+                     Toast.makeText(ExampleActivity.this, "Called from IBR", Toast.LENGTH_LONG);
                 }
 
             }
@@ -150,58 +265,7 @@ public class ExampleActivity extends Activity {
                     switch (activeNetwork.getType()) {
                         case (ConnectivityManager.TYPE_WIFI):
                             Toast.makeText(ExampleActivity.this, "Wi-Fi only", Toast.LENGTH_LONG).show();
-
-
-
-                            BufferedInputStream input;
-                            try {
-
-                                //String filename=computeMD5Hash(mMessage.getText().toString());
-
-                                String urlname = mMessage.getText().toString();
-/*
-                                input = new BufferedInputStream(openFileInput(filename));
-                                int read;
-                                String buffer="";
-                                while ((read = input.read()) != -1) {
-                                    buffer+=(char)read;
-                                }
-                                input.close();
-
-                                File temp = new File(getFilesDir(),filename);
-
-                                //mResult.setText(Html.fromHtml(buffer));
-                                //mWebView.loadUrl("file:///"+temp.getAbsolutePath());
-                                mWebView.loadDataWithBaseURL(urlname.substring(0,urlname.lastIndexOf('/')+1),buffer,"text/html","utf-8",null);
-                                */
-
-                                HTTPReply page = new HTTPReply(getApplicationContext(),urlname);
-                                if(page.getMimeType().startsWith("image")){
-
-                                    String base64String = Base64.encodeToString(page.getData(),Base64.DEFAULT);
-
-                                    mWebView.loadData(base64String,page.getMimeType(),"base64");
-
-                                } else {
-                                    mWebView.loadDataWithBaseURL(page.getURL(), new String(page.getData()), page.getMimeType(), "utf-8", null);
-                                }
-                                Toast.makeText(ExampleActivity.this,
-                                        "Loaded from file",
-                                        Toast.LENGTH_LONG).show();
-
-                            } catch(Exception e) {
-                                Log.d(TAG,"Exception in file open: " + e);
-                                Toast.makeText(ExampleActivity.this,
-                                        REQUEST_FLAG + mMessage.getText().toString(),
-                                        Toast.LENGTH_LONG).show();
-
-                                Intent intent = new Intent(ExampleActivity.this, MyDtnIntentService.class);
-                                intent.setAction(MyDtnIntentService.ACTION_SEND_MESSAGE);
-                                intent.putExtra(MyDtnIntentService.EXTRA_DESTINATION, mDestination.getText().toString());
-                                intent.putExtra(MyDtnIntentService.EXTRA_PAYLOAD,
-                                        (REQUEST_FLAG + mMessage.getText().toString()).getBytes());
-                                startService(intent);
-                            }
+                            loadViaDTN();
                     break;
                     case (ConnectivityManager.TYPE_MOBILE): {
                         switch (tm.getNetworkType()) {
@@ -209,9 +273,12 @@ public class ExampleActivity extends Activity {
                             case (TelephonyManager.NETWORK_TYPE_HSPAP):
                             case (TelephonyManager.NETWORK_TYPE_EDGE):
                             case (TelephonyManager.NETWORK_TYPE_GPRS):
+                                Toast.makeText(ExampleActivity.this, "Cellular, normal", Toast.LENGTH_LONG).show();
                                 mService.getPage(mMessage.getText().toString(), mWebView, MyNetworkGETService.NO_DESTINATION, '\0');
                                 break;
                             default:
+                                Toast.makeText(ExampleActivity.this, "Cellular, other", Toast.LENGTH_LONG).show();
+                                mService.getPage(mMessage.getText().toString(), mWebView, MyNetworkGETService.NO_DESTINATION, '\0');
                                 break;
                         }
                         break;
@@ -226,7 +293,7 @@ public class ExampleActivity extends Activity {
 
             {
                 Toast.makeText(ExampleActivity.this, "None, I guess?", Toast.LENGTH_LONG).show();
-
+                loadViaDTN();
             }
         }
     });
@@ -302,7 +369,7 @@ public class ExampleActivity extends Activity {
     private BroadcastReceiver mReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            mDestination.setText(intent.getStringExtra(MyDtnIntentService.EXTRA_SOURCE));
+//            mDestination.setText(intent.getStringExtra(MyDtnIntentService.EXTRA_SOURCE));
             //Toast.makeText(ExampleActivity.this, new String(intent.getByteArrayExtra(MyDtnIntentService.EXTRA_PAYLOAD)), Toast.LENGTH_LONG).show();
             if (MyDtnIntentService.ACTION_RECV_MESSAGE.equals(intent.getAction())) {
 
@@ -327,21 +394,35 @@ public class ExampleActivity extends Activity {
 
                     Log.d(TAG, "Saving " + reply.getURL());
                     if((char)payload[0]==REPLY_FLAG) {
-                        Log.d(TAG, "Displaying " + reply.getURL());
-                        if(reply.getMimeType().startsWith("image")){
-
-                            String base64String = Base64.encodeToString(reply.getData(),Base64.DEFAULT);
-
-                            mWebView.loadData(base64String,reply.getMimeType(),"base64");
-
-                        } else {
-                            mWebView.loadDataWithBaseURL(reply.getURL(), new String(reply.getData()), reply.getMimeType(), "utf-8", null);
-                        }
+                        fillMainWindow(reply);
                     }
                 }
             }
         }
     };
+
+    private void fillMainWindow(final HTTPReply reply) {
+        Log.d(TAG, "Displaying " + reply.getURL());
+        if (reply.getMimeType().startsWith("image")) {
+
+            final String base64String = Base64.encodeToString(reply.getData(), Base64.DEFAULT);
+
+            mWebView.post(new Runnable() {
+                @Override
+                public void run() {
+                    mWebView.loadData(base64String, reply.getMimeType(), "base64");
+                }
+            });
+
+        } else {
+            mWebView.post(new Runnable() {
+                @Override
+                public void run() {
+                    mWebView.loadDataWithBaseURL(reply.getURL(), new String(reply.getData()), reply.getMimeType(), "utf-8", null);
+                }
+            });
+        }
+    }
 
     private class downloadHandler implements DownloadListener {
         @Override

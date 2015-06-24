@@ -152,7 +152,7 @@ public class HTTPReply {
 
     public int responseCode(){
         String codeAndWords=mResponse.substring(mResponse.indexOf(" ")+1);
-        return Integer.parseInt(codeAndWords.substring(0,codeAndWords.indexOf(" ")));
+        return Integer.parseInt(codeAndWords.substring(0, codeAndWords.indexOf(" ")));
     }
 
     public String reasonPhrase(){
@@ -169,7 +169,32 @@ public class HTTPReply {
         if(type==null){
             type="text/html";
         }
-        return type;
+        return type.split(";")[0];
+    }
+
+    public String getEncoding(){
+        String type= mHeaders.get("Content-Type");
+        if(type==null){
+            return "uft-8";
+        }
+        String manipulate;
+        int index=type.indexOf("charset=");
+        if(index==-1){
+            if(type.startsWith("image")){
+                return "base64";
+            } else {
+                return "utf-8";
+            }
+        } else {
+            int endIndex = type.indexOf(';', index + 1);
+            if (endIndex != -1) {
+                manipulate = type.substring(index+"charset=".length(), endIndex);
+            } else {
+                manipulate = type.substring(index + "charset=".length());
+            }
+        }
+
+        return manipulate;
     }
 
     public String getURL(){

@@ -87,12 +87,6 @@ public class MyNetworkGETService extends Service {
 
                 }
                 returnArray=returnArrayStream.toByteArray();
-                String debugString="";
-                for(int i=0; i < returnArray.length; i++){
-                    debugString+= " " + (int)returnArray[i];
-                }
-                Log.d(TAG,"Data: " + debugString);
-                Log.d(TAG, "count: " + count + " len: "+returnArray.length);
 
             } catch (UnknownHostException uhe) {
                 returnString += "HTTP 404 Not Found\r\n\r\nUnknown Host: " + uhe;
@@ -114,7 +108,7 @@ public class MyNetworkGETService extends Service {
             } else if (!mDest.equals(NO_DESTINATION)) {
                 Log.d(TAG, "Sending va DTN");
                 Intent intent=new Intent(MyNetworkGETService.this,MyDtnIntentService.class);
-                intent.setAction(MyDtnIntentService.ACTION_SEND_MESSAGE);
+                intent.setAction(MyDtnIntentService.ACTION_REPLY_MESSAGE);
                 intent.putExtra(MyDtnIntentService.EXTRA_DESTINATION, mDest);
                 intent.putExtra(MyDtnIntentService.EXTRA_PAYLOAD, returnArray);
                 startService(intent);
@@ -137,7 +131,7 @@ public class MyNetworkGETService extends Service {
 
                 Log.d(TAG, "Bad Request via DTN");
                 Intent intent=new Intent(MyNetworkGETService.this,MyDtnIntentService.class);
-                intent.setAction(MyDtnIntentService.ACTION_SEND_MESSAGE);
+                intent.setAction(MyDtnIntentService.ACTION_REPLY_MESSAGE);
                 intent.putExtra(MyDtnIntentService.EXTRA_DESTINATION, destination);
                 intent.putExtra(MyDtnIntentService.EXTRA_PAYLOAD,
                         (type + url + "\r\nHTTP 500 Bad request\r\n\r\nBad Request: "

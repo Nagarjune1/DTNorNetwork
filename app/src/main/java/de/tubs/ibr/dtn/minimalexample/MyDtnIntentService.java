@@ -6,6 +6,7 @@ import android.util.Log;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.List;
 
 import de.tubs.ibr.dtn.api.Block;
 import de.tubs.ibr.dtn.api.Bundle;
@@ -14,6 +15,7 @@ import de.tubs.ibr.dtn.api.DTNClient;
 import de.tubs.ibr.dtn.api.DTNClient.Session;
 import de.tubs.ibr.dtn.api.DTNIntentService;
 import de.tubs.ibr.dtn.api.DataHandler;
+import de.tubs.ibr.dtn.api.Node;
 import de.tubs.ibr.dtn.api.Registration;
 import de.tubs.ibr.dtn.api.ServiceNotAvailableException;
 import de.tubs.ibr.dtn.api.SessionDestroyedException;
@@ -26,6 +28,7 @@ public class MyDtnIntentService extends DTNIntentService {
     private DTNClient.Session mSession = null;
 
     public static final String ACTION_SEND_MESSAGE = "de.tubs.ibr.dtn.minimalexample.SEND_MESSAGE";
+    public static final String ACTION_REPLY_MESSAGE = "de.tubs.ibr.dtn.minimalexample.REPLY_MESSAGE";
     public static final String ACTION_RECV_MESSAGE = "de.tubs.ibr.dtn.minimalexample.RECV_MESSAGE";
 
     private static final String ACTION_MARK_DELIVERED = "de.tubs.ibr.dtn.minimalexample.DELIVERED";
@@ -38,6 +41,8 @@ public class MyDtnIntentService extends DTNIntentService {
     public MyDtnIntentService() {
         super(TAG);
     }
+
+
 
     @Override
     public void onCreate() {
@@ -66,15 +71,39 @@ public class MyDtnIntentService extends DTNIntentService {
         }
         else if (ACTION_SEND_MESSAGE.equals(action)) {
             try {
-                Log.d(TAG,"Sending message to: "+intent.getStringExtra(EXTRA_DESTINATION));
-                SingletonEndpoint destination = new SingletonEndpoint(intent.getStringExtra(EXTRA_DESTINATION));
-                BundleID thisbundle = mSession.send(destination, 3600, intent.getByteArrayExtra(EXTRA_PAYLOAD));
+                SingletonEndpoint destination;
+                List<Node> neighbors = getClient().getNeighbors();
+                if (neighbors == null) {
+                    Log.d(TAG, "Neighbors null");
+                } else if (neighbors.isEmpty()) {
+                    Log.d(TAG, "No neighbors...sorry!");
+                } else {
+                    SingletonEndpoint firstNeighbor = neighbors.get(0).endpoint;
+                    destination = new SingletonEndpoint(firstNeighbor.toString() + "/minimal-example");
+                    Log.d(TAG, "Sending message to: " + destination);
+                    //SingletonEndpoint destination = new SingletonEndpoint(intent.getStringExtra(EXTRA_DESTINATION));
+                    BundleID thisbundle = mSession.send(destination, 3600, intent.getByteArrayExtra(EXTRA_PAYLOAD));
+                }
+
+
 /*
                 Log.d(TAG, "Sending " + new String(intent.getByteArrayExtra(EXTRA_PAYLOAD)) +
                         " to " + intent.getStringExtra(EXTRA_DESTINATION) + " in bundle " +
                         thisbundle.toString());
 */
             } catch (SessionDestroyedException e) {
+                Log.e(TAG, "session destroyed", e);
+            }
+        }
+        else if (ACTION_REPLY_MESSAGE.equals(action)) {
+            try {
+
+
+                SingletonEndpoint destination = new SingletonEndpoint(intent.getStringExtra(EXTRA_DESTINATION));
+                Log.d(TAG, "Sending reply to: " + destination);
+                BundleID thisbundle = mSession.send(destination, 3600, intent.getByteArrayExtra(EXTRA_PAYLOAD));
+            }
+            catch (SessionDestroyedException e) {
                 Log.e(TAG, "session destroyed", e);
             }
         }
