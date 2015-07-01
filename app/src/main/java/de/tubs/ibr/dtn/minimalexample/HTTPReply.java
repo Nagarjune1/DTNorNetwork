@@ -23,10 +23,10 @@ public class HTTPReply {
     private String mResponse="";
     private byte[] mData;
     private HashMap<String, String> mHeaders=new HashMap<>();
-    private boolean exists=false;
     private Context mContext;
 
     private static final String TAG="HTTPReply";
+
 
     private void createReplyFromInputStream(InputStream input){
         int curr,prev;
@@ -78,8 +78,7 @@ public class HTTPReply {
             mData = new byte[count];
             input.reset();
             input.read(mData);
-            exists = true;
-        } catch (IOException e) {
+           } catch (IOException e) {
 
         }
     }
@@ -207,6 +206,14 @@ public class HTTPReply {
 
     public String getFullFilename(){
         return new File(mContext.getFilesDir(),computeMD5Hash(mURL)).getAbsolutePath();
+    }
+
+    public int getSize(){
+        int tempSize=0;
+        for(Map.Entry<String, String> header : mHeaders.entrySet()){
+            tempSize+=header.getKey().length()+header.getValue().length()+4;
+        }
+        return mURL.length()+3+mResponse.length()+2+mData.length+tempSize+2;
     }
 
     public static String computeMD5Hash(String stringToHash)

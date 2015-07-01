@@ -2,4 +2,7 @@
     xmlns:tools="http://schemas.android.com/tools" tools:context=".ExampleActivity">
     <item android:id="@+id/action_clear" android:title="@string/action_clear"
         android:orderInCategory="100" android:showAsAction="ifRoom" />
+
+    <item android:id="@+id/action_test" android:title="@string/action_test"
+        android:orderInCategory="100" android:showAsAction="ifRoom" />
 </menu>

@@ -181,7 +181,7 @@ public class MyNetworkGETService extends Service {
     public void getPage(String url, WebView view, String destination, char type) {
 
         if (!destination.equals(NO_DESTINATION)) {
-            File log = new File(getExternalFilesDir("Logs"), "Log.txt");
+            /*File log = new File(getExternalFilesDir("Logs"), "Log.txt");
             try {
                 Log.d(TAG, "Write the request");
                 FileWriter fw = new FileWriter(log, true);
@@ -189,7 +189,7 @@ public class MyNetworkGETService extends Service {
                 fw.close();
             } catch (IOException ioe){
                 Log.d(TAG,"Couldn't write to the log file...");
-            }
+            }*/
         }
 
         try {

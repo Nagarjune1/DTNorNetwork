@@ -13,6 +13,7 @@ import android.net.Uri;
 import android.net.wifi.p2p.WifiP2pConfig;
 import android.net.wifi.p2p.WifiP2pManager;
 import android.net.wifi.p2p.nsd.WifiP2pServiceInfo;
+import android.os.BatteryManager;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Parcel;
@@ -36,8 +37,15 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.Map;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class ExampleActivity extends Activity {
 
@@ -45,6 +53,10 @@ public class ExampleActivity extends Activity {
     public static final char REPLY_FLAG='A';
     public static final char SUBS_FLAG='S';
     public static final char BACK_FLAG='B';
+
+    private static boolean  testRunning = false;
+    private static Semaphore blocker=new Semaphore(1);
+    private static ReentrantLock lock = new ReentrantLock();
 
 //    TextView mDestination = null;
     TextView mMessage = null;
@@ -81,16 +93,8 @@ public class ExampleActivity extends Activity {
                     REQUEST_FLAG + mMessage.getText().toString(),
                     Toast.LENGTH_LONG).show();
 
+            writeLog(mMessage.getText().toString() + " init");
 
-            Log.d(TAG, "Initital DTN request for " + mMessage.getText().toString());
-            File log = new File(getExternalFilesDir("Logs"), "Log.txt");
-            try {
-                FileWriter fw = new FileWriter(log, true);
-                fw.write(MyNetworkGETService.getTime() + " - " + mMessage.getText().toString() + " init\n");
-                fw.close();
-            } catch (IOException ioe){
-                Log.d(TAG,"Couldn't write to the log file...");
-            }
             Intent intent = new Intent(ExampleActivity.this, MyDtnIntentService.class);
             intent.setAction(MyDtnIntentService.ACTION_SEND_MESSAGE);
             intent.putExtra(MyDtnIntentService.EXTRA_PAYLOAD,
@@ -212,15 +216,7 @@ public class ExampleActivity extends Activity {
 
                 } catch (FileNotFoundException fnfe) {
 
-                    Log.d(TAG, "Writing sub request for " + request.getUrl().toString());
-                    File log = new File(getExternalFilesDir("Logs"), "Log.txt");
-                    try {
-                        FileWriter fw = new FileWriter(log, true);
-                        fw.write(MyNetworkGETService.getTime() + " - " + request.getUrl().toString() + " sub\n");
-                        fw.close();
-                    } catch (IOException ioe){
-                        Log.d(TAG,"Couldn't write to the log file...");
-                    }
+                    writeLog(request.getUrl().toString() + " sub");
 
                     Intent intent = new Intent(ExampleActivity.this, MyDtnIntentService.class);
                     intent.setAction(MyDtnIntentService.ACTION_SEND_MESSAGE);
@@ -248,7 +244,7 @@ public class ExampleActivity extends Activity {
 
                  if (endpoint.startsWith("dtn:")) {
 //                    mDestination.setText(endpoint + "/minimal-example");
-                     Toast.makeText(ExampleActivity.this, "Called from IBR", Toast.LENGTH_LONG);
+                     Toast.makeText(ExampleActivity.this, "Called from IBR", Toast.LENGTH_LONG).show();
                 }
 
             }
@@ -326,9 +322,70 @@ public class ExampleActivity extends Activity {
         if (id == R.id.action_clear) {
             clearPages();
             return true;
+        } else if (id == R.id.action_test) {
+            Log.d(TAG, "Starting test");
+            runTest();
+            return true;
         }
 
         return super.onOptionsItemSelected(item);
+    }
+
+    private void runTest(){
+
+
+
+        Log.d(TAG, "Starting intitial drop " + getBatteryLevel());
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                float start_batt_level = getBatteryLevel();
+                int j=0;
+                while(getBatteryLevel() == start_batt_level){
+                    try {
+                        blocker.acquire();
+                        Log.d(TAG, "Semephore aquired: " + j++);
+                        Intent intent = new Intent(ExampleActivity.this, MyDtnIntentService.class);
+                        intent.setAction(MyDtnIntentService.ACTION_SEND_MESSAGE);
+                        intent.putExtra(MyDtnIntentService.EXTRA_PAYLOAD,
+                                (SUBS_FLAG + mMessage.getText().toString()).getBytes());
+                        startService(intent);
+                    } catch (InterruptedException ie) {
+                        Log.d(TAG, "Interrupted acquire: " + ie);
+                    }
+
+                }
+
+                Log.d(TAG, "Intitial drop complete: " + getBatteryLevel());
+
+                for(int i = 0; i < 1; i ++) {
+                    start_batt_level = getBatteryLevel();
+                    writeLog("Starting drop " + i + " " + mMessage.getText().toString());
+                    while (getBatteryLevel() == start_batt_level) {
+                        try {
+                            blocker.acquire();
+                            Intent intent = new Intent(ExampleActivity.this, MyDtnIntentService.class);
+                            intent.setAction(MyDtnIntentService.ACTION_SEND_MESSAGE);
+                            intent.putExtra(MyDtnIntentService.EXTRA_PAYLOAD,
+                                    (SUBS_FLAG + mMessage.getText().toString()).getBytes());
+                            startService(intent);
+                        } catch (InterruptedException ie) {
+                            Log.d(TAG, "Interrupted acquire during test: " + ie);
+                        }
+
+                    }
+                    writeLog("Ending drop " + i + " " + mMessage.getText().toString());
+
+                }
+
+
+            }
+        } ).start();
+
+
+
+
+
     }
 
     private void clearPages(){
@@ -396,19 +453,18 @@ public class ExampleActivity extends Activity {
                 } else if((char)payload[0]==REPLY_FLAG || (char)payload[0]==BACK_FLAG){
 
                     HTTPReply reply = new HTTPReply(getApplicationContext(), Arrays.copyOfRange(payload, 1, payload.length));
-                    reply.saveToFile();
 
-                    Log.d(TAG, "Writing reply for " + reply.getURL());
-                    File log = new File(getExternalFilesDir("Logs"), "Log.txt");
-                    try {
-                        FileWriter fw = new FileWriter(log, true);
-                        fw.write(MyNetworkGETService.getTime() + " - " + reply.getURL() + " reply\n");
-                        fw.close();
-                    } catch (IOException ioe){
-                        Log.d(TAG,"Couldn't write to the log file...");
+                    if(blocker.availablePermits() < 1){
+                        blocker.release();
+                    } else {
+                        reply.saveToFile();
+                        writeLog(reply.getURL() + " " + reply.getSize() + " reply");
+
+                        Log.d(TAG, "Saving " + reply.getURL());
                     }
 
-                    Log.d(TAG, "Saving " + reply.getURL());
+
+
                     if((char)payload[0]==REPLY_FLAG) {
                         fillMainWindow(reply);
                     }
@@ -416,6 +472,35 @@ public class ExampleActivity extends Activity {
             }
         }
     };
+
+    private String getTime(){
+		return new SimpleDateFormat("MM-dd hh:mm:ss.SSS").format(new Date());
+	}
+
+   private float getBatteryLevel(){
+		Intent batteryStatus = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+
+		int level = batteryStatus.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+		int scale = batteryStatus.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+
+		/**gets the percentage**/
+		return ((float)level / (float) scale) * (float)100;
+
+
+
+	}
+
+    private void writeLog(String line){
+        Log.d(TAG, "Writing to log: " + line);
+        File log = new File(getExternalFilesDir("Logs"), "Log.txt");
+        try {
+            FileWriter fw = new FileWriter(log, true);
+            fw.write(getTime() + " " + getBatteryLevel() + " " + line+'\n');
+            fw.close();
+        } catch (IOException ioe){
+            Log.d(TAG,"Couldn't write to the log file...");
+        }
+    }
 
     private void fillMainWindow(final HTTPReply reply) {
         Log.d(TAG, "Displaying " + reply.getURL());
