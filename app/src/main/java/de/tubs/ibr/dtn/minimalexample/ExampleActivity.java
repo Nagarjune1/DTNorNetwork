@@ -31,12 +31,12 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 
-import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.FileNotFoundException;
-import java.net.URL;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
 
 public class ExampleActivity extends Activity {
@@ -76,11 +76,21 @@ public class ExampleActivity extends Activity {
                     Toast.LENGTH_LONG).show();
 
         } catch(Exception e) {
-            Log.d(TAG,"Exception in file open: " + e);
+            Log.d(TAG, "Exception in file open: " + e);
             Toast.makeText(ExampleActivity.this,
                     REQUEST_FLAG + mMessage.getText().toString(),
                     Toast.LENGTH_LONG).show();
 
+
+            Log.d(TAG, "Initital DTN request for " + mMessage.getText().toString());
+            File log = new File(getExternalFilesDir("Logs"), "Log.txt");
+            try {
+                FileWriter fw = new FileWriter(log, true);
+                fw.write(MyNetworkGETService.getTime() + " - " + mMessage.getText().toString() + " init\n");
+                fw.close();
+            } catch (IOException ioe){
+                Log.d(TAG,"Couldn't write to the log file...");
+            }
             Intent intent = new Intent(ExampleActivity.this, MyDtnIntentService.class);
             intent.setAction(MyDtnIntentService.ACTION_SEND_MESSAGE);
             intent.putExtra(MyDtnIntentService.EXTRA_PAYLOAD,
@@ -89,21 +99,6 @@ public class ExampleActivity extends Activity {
         }
     }
 
-    public WebResourceResponse handleRedirect(HTTPReply request){
-
-        WebResourceResponse newPage;
-        Log.d(TAG, "Headers in redirect: " +request.getHeaders());
-
-        String nextPage=request.getHeaders().get("Location");
-        if(nextPage==null){
-            return null;
-        } else {
-
-        }
-
-        HTTPReply newResponse;
-        return null;
-    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -216,6 +211,17 @@ public class ExampleActivity extends Activity {
                     return response;
 
                 } catch (FileNotFoundException fnfe) {
+
+                    Log.d(TAG, "Writing sub request for " + request.getUrl().toString());
+                    File log = new File(getExternalFilesDir("Logs"), "Log.txt");
+                    try {
+                        FileWriter fw = new FileWriter(log, true);
+                        fw.write(MyNetworkGETService.getTime() + " - " + request.getUrl().toString() + " sub\n");
+                        fw.close();
+                    } catch (IOException ioe){
+                        Log.d(TAG,"Couldn't write to the log file...");
+                    }
+
                     Intent intent = new Intent(ExampleActivity.this, MyDtnIntentService.class);
                     intent.setAction(MyDtnIntentService.ACTION_SEND_MESSAGE);
                     intent.putExtra(MyDtnIntentService.EXTRA_PAYLOAD,
@@ -391,6 +397,16 @@ public class ExampleActivity extends Activity {
 
                     HTTPReply reply = new HTTPReply(getApplicationContext(), Arrays.copyOfRange(payload, 1, payload.length));
                     reply.saveToFile();
+
+                    Log.d(TAG, "Writing reply for " + reply.getURL());
+                    File log = new File(getExternalFilesDir("Logs"), "Log.txt");
+                    try {
+                        FileWriter fw = new FileWriter(log, true);
+                        fw.write(MyNetworkGETService.getTime() + " - " + reply.getURL() + " reply\n");
+                        fw.close();
+                    } catch (IOException ioe){
+                        Log.d(TAG,"Couldn't write to the log file...");
+                    }
 
                     Log.d(TAG, "Saving " + reply.getURL());
                     if((char)payload[0]==REPLY_FLAG) {
